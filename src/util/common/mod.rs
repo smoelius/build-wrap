@@ -1,6 +1,6 @@
 //! This file is included verbatim in the wrapper build script's src/main.rs file.
 
-use anyhow::{anyhow, bail, ensure, Context, Result};
+use anyhow::{Context, Result, anyhow, bail, ensure};
 use std::{
     env,
     fs::{canonicalize, read_to_string},
@@ -11,6 +11,8 @@ use std::{
     str::Utf8Error,
     sync::LazyLock,
 };
+
+pub mod config;
 
 #[allow(dead_code)]
 const DEFAULT_PROFILE: &str = r#"(version 1)
@@ -134,10 +136,11 @@ fn split_escaped(mut s: &str) -> Result<Vec<String>> {
     while let Some(i) = s.find(|c: char| c.is_ascii_whitespace() || c == '\\') {
         debug_assert!(!v.is_empty());
         // smoelius: Only the last string in `v` can be empty.
-        debug_assert!(v
-            .iter()
-            .position(String::is_empty)
-            .is_none_or(|i| i == v.len() - 1));
+        debug_assert!(
+            v.iter()
+                .position(String::is_empty)
+                .is_none_or(|i| i == v.len() - 1)
+        );
 
         let c = s.as_bytes()[i];
 
@@ -275,7 +278,10 @@ fn enabled(name: &str) -> bool {
     env::var(name).is_ok_and(|value| value != "0")
 }
 
-static ALLOWED_PACKAGE_NAMES: LazyLock<Vec<String>> = LazyLock::new(|| {
+static ALLOWED_PACKAGE_NAMES: LazyLock<&Vec<String>> =
+    LazyLock::new(|| config::ALLOWED_PACKAGES.unwrap_or_else(|| &*ALLOW_TXT_LINES));
+
+static ALLOW_TXT_LINES: LazyLock<Vec<String>> = LazyLock::new(|| {
     let base_directories = xdg::BaseDirectories::new();
     let Some(allowed) = base_directories.find_config_file("build-wrap/allow.txt") else {
         return Vec::new();
@@ -301,7 +307,9 @@ mod test {
 
     #[test]
     fn expand_cmd() {
-        set_var("KEY", "VALUE");
+        unsafe {
+            set_var("KEY", "VALUE");
+        }
 
         let successes = [
             ("left path right", "{}"),
